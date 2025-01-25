@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trading Progress Tracker</title>
+  <style>
+    :root {
+      --primary-color: #2ecc71;
+      --secondary-color: #34495e;
+      --text-color: #ffffff;
+      --background-color: #1c1c1c;
+      --circle-background: #ff0000; /* Changed circle color to red */
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: var(--background-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      min-height: 100vh;
+    }
+
+    .goal-section {
+      margin-top: 20px;
+      text-align: center;
+    }
+
+    .progress-circle {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: conic-gradient(var(--primary-color) 0% 0%, var(--circle-background) 0% 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 20px auto;
+    }
+
+    .progress-circle span {
+      position: absolute;
+      font-size: 1.5em;
+      font-weight: bold;
+    }
+
+    .trade-section {
+      width: 90%;
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 20px;
+      background: var(--secondary-color);
+      border-radius: 10px;
+    }
+
+    .trade-section input, .trade-section select, .trade-section button {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+      font-size: 1em;
+      border: none;
+      border-radius: 5px;
+    }
+
+    .trade-section button {
+      background: var(--primary-color);
+      color: var(--text-color);
+      cursor: pointer;
+    }
+
+    .history-section {
+      width: 90%;
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 20px;
+      background: var(--secondary-color);
+      border-radius: 10px;
+    }
+
+    .history-section ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .history-section li {
+      padding: 10px;
+      margin: 5px 0;
+      background: #2c3e50;
+      border-radius: 5px;
+    }
+
+    .dark-mode-toggle {
+      margin-top: 10px;
+      cursor: pointer;
+      font-size: 1em;
+      padding: 5px 10px;
+      background: var(--primary-color);
+      border: none;
+      border-radius: 5px;
+      color: var(--text-color);
+    }
+
+    .confetti {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="goal-section">
+    <h1>Trading Progress Tracker</h1>
+    <div class="progress-circle" id="progress-circle">
+      <span id="remaining-goal">0</span>
+    </div>
+    <input type="number" id="goal-input" placeholder="Set your goal (e.g., $2000)" />
+    <button onclick="setGoal()">Set Goal</button>
+  </div>
+
+  <div class="trade-section">
+    <h2>Add a Trade</h2>
+    <input type="text" id="stock-name" placeholder="Stock Name (e.g., AAPL)" />
+    <input type="number" id="profit-loss" placeholder="Profit/Loss (e.g., 200 or -100)" />
+    <select id="trade-category">
+      <option value="day-trade">Day Trade</option>
+      <option value="swing-trade">Swing Trade</option>
+    </select>
+    <button onclick="addTrade()">Add Trade</button>
+  </div>
+
+  <div class="history-section">
+    <h2>Trade History</h2>
+    <ul id="trade-history"></ul>
+  </div>
+
+  <button class="dark-mode-toggle" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+
+  <canvas class="confetti" id="confetti"></canvas>
+
+  <script>
+    let goal = 0;
+    let remainingGoal = 0;
+    let tradeHistory = [];
+    const confettiCanvas = document.getElementById('confetti');
+
+    function setGoal() {
+      const goalInput = document.getElementById('goal-input').value;
+      goal = parseFloat(goalInput);
+      remainingGoal = goal;
+      updateProgress();
+    }
+
+    function addTrade() {
+      const stockName = document.getElementById('stock-name').value;
+      const profitLoss = parseFloat(document.getElementById('profit-loss').value);
+      const tradeCategory = document.getElementById('trade-category').value;
+
+      remainingGoal -= profitLoss;
+      tradeHistory.push({ stockName, profitLoss, tradeCategory });
+
+      updateProgress();
+      updateHistory();
+
+      if (remainingGoal <= 0) {
+        showConfetti();
+      }
+    }
+
+    function updateProgress() {
+      const circle = document.getElementById('progress-circle');
+      const percentage = Math.max(0, ((goal - remainingGoal) / goal) * 100);
+      circle.style.background = `conic-gradient(var(--primary-color) ${percentage}%, var(--circle-background) ${percentage}% 100%)`;
+      document.getElementById('remaining-goal').textContent = `$${Math.max(0, remainingGoal).toFixed(2)}`;
+    }
+
+    function updateHistory() {
+      const historyList = document.getElementById('trade-history');
+      historyList.innerHTML = '';
+
+      tradeHistory.forEach((trade) => {
+        const listItem = document.createElement('li');
+        listItem.textContent = `${trade.stockName} (${trade.tradeCategory}) - $${trade.profitLoss}`;
+        historyList.appendChild(listItem);
+      });
+    }
+
+    function toggleDarkMode() {
+      const root = document.documentElement;
+      if (root.style.getPropertyValue('--background-color') === '#ffffff') {
+        root.style.setProperty('--background-color', '#1c1c1c');
+        root.style.setProperty('--text-color', '#ffffff');
+      } else {
+        root.style.setProperty('--background-color', '#ffffff');
+        root.style.setProperty('--text-color', '#000000');
+      }
+    }
+
+    function showConfetti() {
+      // Confetti logic here if needed
+      alert('Congratulations! You reached your goal!');
+    }
+  </script>
+</body>
+</html>
