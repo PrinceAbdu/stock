@@ -4,13 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Progress Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
   <style>
     :root {
       --primary-color: #2ecc71;
       --secondary-color: #34495e;
       --text-color: #ffffff;
       --background-color: #1c1c1c;
-      --circle-background: #ff0000; /* Changed circle color to red */
+      --circle-background: #ff0000;
     }
 
     body {
@@ -105,13 +108,69 @@
       color: var(--text-color);
     }
 
-    .confetti {
-      position: absolute;
-      top: 0;
-      left: 0;
+    .analytics-section {
+      width: 90%;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background: var(--secondary-color);
+      border-radius: 10px;
+      text-align: center;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 400px;
       width: 100%;
-      height: 100%;
-      pointer-events: none;
+    }
+
+    .chart-toggle {
+      margin: 10px;
+      cursor: pointer;
+      padding: 5px 10px;
+      background: var(--primary-color);
+      border: none;
+      border-radius: 5px;
+      color: var(--text-color);
+    }
+
+    .custom-date-filter {
+      margin: 15px 0;
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .custom-date-filter input {
+      padding: 5px;
+      font-size: 1em;
+      border: none;
+      border-radius: 5px;
+    }
+
+    .motivational-message {
+      font-size: 1.2em;
+      font-weight: bold;
+      margin-top: 20px;
+      color: var(--primary-color);
+    }
+
+    .trade-group {
+      margin-bottom: 20px;
+      background: #2c3e50;
+      padding: 15px;
+      border-radius: 10px;
+    }
+
+    .trade-group h3 {
+      margin: 0;
+      color: var(--primary-color);
+      font-size: 1.2em;
+    }
+
+    .export-section {
+      margin: 20px auto;
+      text-align: center;
     }
   </style>
 </head>
@@ -138,7 +197,29 @@
 
   <div class="history-section">
     <h2>Trade History</h2>
-    <ul id="trade-history"></ul>
+    <div id="trade-history"></div>
+  </div>
+
+  <div class="analytics-section">
+    <h2>Analytics Dashboard</h2>
+    <div class="custom-date-filter">
+      <input type="date" id="start-date" />
+      <input type="date" id="end-date" />
+      <button onclick="filterByDate()">Filter</button>
+    </div>
+    <button class="chart-toggle" onclick="toggleChart('bar')">Bar Chart</button>
+    <button class="chart-toggle" onclick="toggleChart('pie')">Pie Chart</button>
+    <div class="chart-container">
+      <canvas id="analytics-chart"></canvas>
+    </div>
+    <div class="motivational-message" id="motivational-message"></div>
+  </div>
+
+  <div class="export-section">
+    <h2>Export & Import</h2>
+    <button onclick="exportData()">Export as CSV</button>
+    <button onclick="exportPDF()">Export as PDF</button>
+    <input type="file" id="import-file" accept=".csv" onchange="importData(event)" />
   </div>
 
   <button class="dark-mode-toggle" onclick="toggleDarkMode()">Toggle Dark Mode</button>
@@ -149,7 +230,10 @@
     let goal = 0;
     let remainingGoal = 0;
     let tradeHistory = [];
+
     const confettiCanvas = document.getElementById('confetti');
+    const ctx = document.getElementById('analytics-chart').getContext('2d');
+    let chart;
 
     function setGoal() {
       const goalInput = document.getElementById('goal-input').value;
@@ -162,12 +246,15 @@
       const stockName = document.getElementById('stock-name').value;
       const profitLoss = parseFloat(document.getElementById('profit-loss').value);
       const tradeCategory = document.getElementById('trade-category').value;
+      const date = new Date().toISOString().split('T')[0];
 
       remainingGoal -= profitLoss;
-      tradeHistory.push({ stockName, profitLoss, tradeCategory });
+      tradeHistory.push({ stockName, profitLoss, tradeCategory, date });
 
       updateProgress();
       updateHistory();
+      updateChart('bar');
+      displayMotivationalMessage();
 
       if (remainingGoal <= 0) {
         showConfetti();
@@ -182,29 +269,128 @@
     }
 
     function updateHistory() {
-      const historyList = document.getElementById('trade-history');
-      historyList.innerHTML = '';
+      const historyContainer = document.getElementById('trade-history');
+      historyContainer.innerHTML = '';
 
-      tradeHistory.forEach((trade) => {
-        const listItem = document.createElement('li');
-        listItem.textContent = `${trade.stockName} (${trade.tradeCategory}) - $${trade.profitLoss}`;
-        historyList.appendChild(listItem);
+      const groupedTrades = tradeHistory.reduce((groups, trade) => {
+        if (!groups[trade.stockName]) {
+          groups[trade.stockName] = [];
+        }
+        groups[trade.stockName].push(trade);
+        return groups;
+      }, {});
+
+      Object.keys(groupedTrades).forEach(stockName => {
+        const groupDiv = document.createElement('div');
+        groupDiv.classList.add('trade-group');
+
+        const groupHeader = document.createElement('h3');
+        groupHeader.textContent = stockName;
+        groupDiv.appendChild(groupHeader);
+
+        const tradeList = document.createElement('ul');
+        groupedTrades[stockName].forEach(trade => {
+          const listItem = document.createElement('li');
+          listItem.textContent = `(${trade.tradeCategory}) - $${trade.profitLoss} on ${trade.date}`;
+          tradeList.appendChild(listItem);
+        });
+
+        groupDiv.appendChild(tradeList);
+        historyContainer.appendChild(groupDiv);
       });
     }
 
-    function toggleDarkMode() {
-      const root = document.documentElement;
-      if (root.style.getPropertyValue('--background-color') === '#ffffff') {
-        root.style.setProperty('--background-color', '#1c1c1c');
-        root.style.setProperty('--text-color', '#ffffff');
+    function toggleChart(type) {
+      updateChart(type);
+    }
+
+    function updateChart(type) {
+      const groupedTrades = tradeHistory.reduce((groups, trade) => {
+        if (!groups[trade.stockName]) {
+          groups[trade.stockName] = 0;
+        }
+        groups[trade.stockName] += trade.profitLoss;
+        return groups;
+      }, {});
+
+      const labels = Object.keys(groupedTrades);
+      const data = Object.values(groupedTrades);
+
+      if (chart) {
+        chart.destroy();
+      }
+
+      chart = new Chart(ctx, {
+        type: type,
+        data: {
+          labels: labels,
+          datasets: [{
+            label: type === 'bar' ? 'Net Profit/Loss' : '',
+            data: data,
+            backgroundColor: type === 'pie' ? labels.map(() => `hsl(${Math.random() * 360}, 70%, 70%)`) : data.map((value) => (value >= 0 ? 'green' : 'red')),
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: {
+              display: type === 'pie'
+            }
+          },
+          scales: type === 'bar' ? {
+            x: {
+              title: {
+                display: true,
+                text: 'Stock Name'
+              }
+            },
+            y: {
+              title: {
+                display: true,
+                text: 'Net Profit/Loss ($)'
+              }
+            }
+          } : {}
+        }
+      });
+    }
+
+    function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF();
+
+      pdf.setFontSize(18);
+      pdf.text('Trade History', 10, 10);
+
+      let y = 20;
+      tradeHistory.forEach(trade => {
+        pdf.text(
+          `${trade.date}: ${trade.stockName} (${trade.tradeCategory}) - $${trade.profitLoss}`,
+          10,
+          y
+        );
+        y += 10;
+      });
+
+      pdf.save('trade_history.pdf');
+    }
+
+    function displayMotivationalMessage() {
+      const message = document.getElementById('motivational-message');
+      const progress = ((goal - remainingGoal) / goal) * 100;
+
+      if (progress >= 100) {
+        message.textContent = "Amazing job! You've reached your goal!";
+      } else if (progress >= 75) {
+        message.textContent = "You're almost there! Keep it up!";
+      } else if (progress >= 50) {
+        message.textContent = "Halfway there! Keep pushing!";
       } else {
-        root.style.setProperty('--background-color', '#ffffff');
-        root.style.setProperty('--text-color', '#000000');
+        message.textContent = "Great start! Keep tracking your trades!";
       }
     }
 
     function showConfetti() {
-      // Confetti logic here if needed
       alert('Congratulations! You reached your goal!');
     }
   </script>
