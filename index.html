@@ -7,6 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/file-saver"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.4.0/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1"></script>
   <style>
     :root {
       --primary-color: #2ecc71;
@@ -14,10 +15,11 @@
       --text-color: #ffffff;
       --background-color: #1c1c1c;
       --circle-background: #ff0000;
+      --accent-color: #3498db;
     }
 
     body {
-      font-family: Arial, sans-serif;
+      font-family: 'Arial', sans-serif;
       margin: 0;
       padding: 0;
       background-color: var(--background-color);
@@ -27,6 +29,7 @@
       align-items: center;
       justify-content: flex-start;
       min-height: 100vh;
+      transition: background-color 0.3s, color 0.3s;
     }
 
     .goal-section {
@@ -44,6 +47,7 @@
       align-items: center;
       justify-content: center;
       margin: 20px auto;
+      transition: background 0.5s;
     }
 
     .progress-circle span {
@@ -52,13 +56,14 @@
       font-weight: bold;
     }
 
-    .trade-section {
+    .trade-section, .history-section, .analytics-section, .export-section, .leaderboard-section {
       width: 90%;
-      max-width: 500px;
+      max-width: 800px;
       margin: 20px auto;
       padding: 20px;
       background: var(--secondary-color);
       border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     }
 
     .trade-section input, .trade-section select, .trade-section button {
@@ -74,15 +79,11 @@
       background: var(--primary-color);
       color: var(--text-color);
       cursor: pointer;
+      transition: background 0.3s;
     }
 
-    .history-section {
-      width: 90%;
-      max-width: 500px;
-      margin: 20px auto;
-      padding: 20px;
-      background: var(--secondary-color);
-      border-radius: 10px;
+    .trade-section button:hover {
+      background: #27ae60;
     }
 
     .history-section ul {
@@ -106,16 +107,6 @@
       border: none;
       border-radius: 5px;
       color: var(--text-color);
-    }
-
-    .analytics-section {
-      width: 90%;
-      max-width: 800px;
-      margin: 20px auto;
-      padding: 20px;
-      background: var(--secondary-color);
-      border-radius: 10px;
-      text-align: center;
     }
 
     .chart-container {
@@ -172,6 +163,41 @@
       margin: 20px auto;
       text-align: center;
     }
+
+    .leaderboard-section {
+      text-align: center;
+    }
+
+    .leaderboard-section table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .leaderboard-section th, .leaderboard-section td {
+      padding: 10px;
+      border: 1px solid #444;
+    }
+
+    .leaderboard-section th {
+      background: var(--primary-color);
+      color: var(--text-color);
+    }
+
+    .loading-spinner {
+      display: none;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid var(--primary-color);
+      border-radius: 50%;
+      width: 30px;
+      height: 30px;
+      animation: spin 1s linear infinite;
+      margin: 20px auto;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
@@ -197,6 +223,7 @@
 
   <div class="history-section">
     <h2>Trade History</h2>
+    <input type="text" id="search-trades" placeholder="Search trades..." oninput="filterTrades()" />
     <div id="trade-history"></div>
   </div>
 
@@ -209,6 +236,7 @@
     </div>
     <button class="chart-toggle" onclick="toggleChart('bar')">Bar Chart</button>
     <button class="chart-toggle" onclick="toggleChart('pie')">Pie Chart</button>
+    <button class="chart-toggle" onclick="toggleChart('line')">Line Chart</button>
     <div class="chart-container">
       <canvas id="analytics-chart"></canvas>
     </div>
@@ -219,34 +247,45 @@
     <h2>Export & Import</h2>
     <button onclick="exportData()">Export as CSV</button>
     <button onclick="exportPDF()">Export as PDF</button>
-    <input type="file" id="import-file" accept=".csv" onchange="importData(event)" />
+    <button onclick="exportJSON()">Export as JSON</button>
+    <input type="file" id="import-file" accept=".csv, .json" onchange="importData(event)" />
   </div>
 
   <button class="dark-mode-toggle" onclick="toggleDarkMode()">Toggle Dark Mode</button>
 
-  <canvas class="confetti" id="confetti"></canvas>
+  <div class="loading-spinner" id="loading-spinner"></div>
 
   <script>
     let goal = 0;
     let remainingGoal = 0;
     let tradeHistory = [];
 
-    const confettiCanvas = document.getElementById('confetti');
     const ctx = document.getElementById('analytics-chart').getContext('2d');
     let chart;
 
+    // Set Goal Function
     function setGoal() {
       const goalInput = document.getElementById('goal-input').value;
+      if (!goalInput || isNaN(goalInput)) {
+        alert("Please enter a valid goal amount.");
+        return;
+      }
       goal = parseFloat(goalInput);
       remainingGoal = goal;
       updateProgress();
     }
 
+    // Add Trade Function
     function addTrade() {
       const stockName = document.getElementById('stock-name').value;
       const profitLoss = parseFloat(document.getElementById('profit-loss').value);
       const tradeCategory = document.getElementById('trade-category').value;
       const date = new Date().toISOString().split('T')[0];
+
+      if (!stockName || isNaN(profitLoss)) {
+        alert("Please fill in all fields correctly.");
+        return;
+      }
 
       remainingGoal -= profitLoss;
       tradeHistory.push({ stockName, profitLoss, tradeCategory, date });
@@ -257,10 +296,19 @@
       displayMotivationalMessage();
 
       if (remainingGoal <= 0) {
-        showConfetti();
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
       }
+
+      // Clear input fields
+      document.getElementById('stock-name').value = '';
+      document.getElementById('profit-loss').value = '';
     }
 
+    // Update Progress Circle
     function updateProgress() {
       const circle = document.getElementById('progress-circle');
       const percentage = Math.max(0, ((goal - remainingGoal) / goal) * 100);
@@ -268,6 +316,7 @@
       document.getElementById('remaining-goal').textContent = `$${Math.max(0, remainingGoal).toFixed(2)}`;
     }
 
+    // Update Trade History
     function updateHistory() {
       const historyContainer = document.getElementById('trade-history');
       historyContainer.innerHTML = '';
@@ -291,7 +340,7 @@
         const tradeList = document.createElement('ul');
         groupedTrades[stockName].forEach(trade => {
           const listItem = document.createElement('li');
-          listItem.textContent = `(${trade.tradeCategory}) - $${trade.profitLoss} on ${trade.date}`;
+          listItem.textContent = `(${trade.tradeCategory}) - $${trade.profitLoss.toFixed(2)} on ${trade.date}`;
           tradeList.appendChild(listItem);
         });
 
@@ -300,10 +349,15 @@
       });
     }
 
+    // Toggle Chart Type
     function toggleChart(type) {
-      updateChart(type);
+      if (chart) {
+        chart.destroy(); // Destroy the existing chart
+      }
+      updateChart(type); // Recreate the chart with the new type
     }
 
+    // Update Chart Function
     function updateChart(type) {
       const groupedTrades = tradeHistory.reduce((groups, trade) => {
         if (!groups[trade.stockName]) {
@@ -316,28 +370,26 @@
       const labels = Object.keys(groupedTrades);
       const data = Object.values(groupedTrades);
 
-      if (chart) {
-        chart.destroy();
-      }
-
       chart = new Chart(ctx, {
         type: type,
         data: {
           labels: labels,
           datasets: [{
-            label: type === 'bar' ? 'Net Profit/Loss' : '',
+            label: type === 'bar' || type === 'line' ? 'Net Profit/Loss' : '',
             data: data,
             backgroundColor: type === 'pie' ? labels.map(() => `hsl(${Math.random() * 360}, 70%, 70%)`) : data.map((value) => (value >= 0 ? 'green' : 'red')),
+            borderColor: type === 'line' ? 'rgba(75, 192, 192, 1)' : undefined,
+            borderWidth: type === 'line' ? 2 : undefined,
           }]
         },
         options: {
           responsive: true,
           plugins: {
             legend: {
-              display: type === 'pie'
+              display: type === 'pie' || type === 'line'
             }
           },
-          scales: type === 'bar' ? {
+          scales: type === 'bar' || type === 'line' ? {
             x: {
               title: {
                 display: true,
@@ -355,26 +407,7 @@
       });
     }
 
-    function exportPDF() {
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF();
-
-      pdf.setFontSize(18);
-      pdf.text('Trade History', 10, 10);
-
-      let y = 20;
-      tradeHistory.forEach(trade => {
-        pdf.text(
-          `${trade.date}: ${trade.stockName} (${trade.tradeCategory}) - $${trade.profitLoss}`,
-          10,
-          y
-        );
-        y += 10;
-      });
-
-      pdf.save('trade_history.pdf');
-    }
-
+    // Display Motivational Message
     function displayMotivationalMessage() {
       const message = document.getElementById('motivational-message');
       const progress = ((goal - remainingGoal) / goal) * 100;
@@ -390,8 +423,127 @@
       }
     }
 
-    function showConfetti() {
-      alert('Congratulations! You reached your goal!');
+    // Filter Trades by Search
+    function filterTrades() {
+      const searchTerm = document.getElementById('search-trades').value.toLowerCase();
+      const filteredTrades = tradeHistory.filter(trade => 
+        trade.stockName.toLowerCase().includes(searchTerm) ||
+        trade.tradeCategory.toLowerCase().includes(searchTerm) ||
+        trade.date.includes(searchTerm)
+      );
+      renderFilteredHistory(filteredTrades);
+    }
+
+    // Render Filtered History
+    function renderFilteredHistory(filteredTrades) {
+      const historyContainer = document.getElementById('trade-history');
+      historyContainer.innerHTML = '';
+
+      const groupedTrades = filteredTrades.reduce((groups, trade) => {
+        if (!groups[trade.stockName]) {
+          groups[trade.stockName] = [];
+        }
+        groups[trade.stockName].push(trade);
+        return groups;
+      }, {});
+
+      Object.keys(groupedTrades).forEach(stockName => {
+        const groupDiv = document.createElement('div');
+        groupDiv.classList.add('trade-group');
+
+        const groupHeader = document.createElement('h3');
+        groupHeader.textContent = stockName;
+        groupDiv.appendChild(groupHeader);
+
+        const tradeList = document.createElement('ul');
+        groupedTrades[stockName].forEach(trade => {
+          const listItem = document.createElement('li');
+          listItem.textContent = `(${trade.tradeCategory}) - $${trade.profitLoss.toFixed(2)} on ${trade.date}`;
+          tradeList.appendChild(listItem);
+        });
+
+        groupDiv.appendChild(tradeList);
+        historyContainer.appendChild(groupDiv);
+      });
+    }
+
+    // Export Data as CSV
+    function exportData() {
+      const csvContent = "data:text/csv;charset=utf-8," +
+        tradeHistory.map(trade => `${trade.date},${trade.stockName},${trade.tradeCategory},${trade.profitLoss}`).join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "trade_history.csv");
+      document.body.appendChild(link);
+      link.click();
+    }
+
+    // Export Data as PDF
+    function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF();
+
+      pdf.setFontSize(18);
+      pdf.text('Trade History', 10, 10);
+
+      let y = 20;
+      tradeHistory.forEach(trade => {
+        pdf.text(
+          `${trade.date}: ${trade.stockName} (${trade.tradeCategory}) - $${trade.profitLoss.toFixed(2)}`,
+          10,
+          y
+        );
+        y += 10;
+      });
+
+      pdf.save('trade_history.pdf');
+    }
+
+    // Export Data as JSON
+    function exportJSON() {
+      const jsonContent = JSON.stringify(tradeHistory, null, 2);
+      const blob = new Blob([jsonContent], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'trade_history.json';
+      link.click();
+    }
+
+    // Import Data
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const content = e.target.result;
+        if (file.name.endsWith('.csv')) {
+          tradeHistory = content.split('\n').map(line => {
+            const [date, stockName, tradeCategory, profitLoss] = line.split(',');
+            return { date, stockName, tradeCategory, profitLoss: parseFloat(profitLoss) };
+          });
+        } else if (file.name.endsWith('.json')) {
+          tradeHistory = JSON.parse(content);
+        }
+        updateHistory();
+        updateChart('bar');
+      };
+      reader.readAsText(file);
+    }
+  
+    // Toggle Dark Mode
+    function toggleDarkMode() {
+      const body = document.body;
+      body.classList.toggle('light-mode');
+      if (body.classList.contains('light-mode')) {
+        body.style.backgroundColor = '#ffffff';
+        body.style.color = '#000000';
+      } else {
+        body.style.backgroundColor = '#1c1c1c';
+        body.style.color = '#ffffff';
+      }
     }
   </script>
 </body>
